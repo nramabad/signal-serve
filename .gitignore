@@ -9,3 +9,4 @@ cross-pre-build.sh
 Cross.toml
 __pycache__/
 *.pyc
+.DS_Store
