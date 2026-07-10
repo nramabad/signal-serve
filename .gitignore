@@ -1,0 +1,11 @@
+target/
+Dockerfile
+Dockerfile.signal-serve
+container-build/
+*.tar
+*.img
+build_errors.log
+cross-pre-build.sh
+Cross.toml
+__pycache__/
+*.pyc
