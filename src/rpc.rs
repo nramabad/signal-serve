@@ -7,9 +7,27 @@ use presage::{
     },
     store::ContentsStore,
 };
+use presage::libsignal_service::prelude::Uuid;
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
+
+/// Find a contact by recipient address. Tries UUID parse first (hermes passes
+/// recipient UUID), falls back to E164 phone substring match. Returns None if
+/// neither matches — caller logs "Contact not found".
+fn find_contact<'a>(contacts: &'a [presage::model::contacts::Contact], addr: &str) -> Option<&'a presage::model::contacts::Contact> {
+    // UUID match: hermes sends recipient as bare UUID string.
+    let addr_clean = addr.strip_prefix('+').unwrap_or(addr);
+    if let Ok(u) = Uuid::parse_str(addr_clean) {
+        if let Some(c) = contacts.iter().find(|c| c.uuid == u) {
+            return Some(c);
+        }
+    }
+    // Phone match: E164 substring test (legacy behavior).
+    contacts.iter().find(|c| {
+        c.phone_number.as_ref().map(|p| format!("{}", p).contains(addr_clean)).unwrap_or(false)
+    })
+}
 
 pub async fn dispatch(state: &mut AppState, req: &Value) -> Value {
     let method = req.get("method").and_then(|v| v.as_str()).unwrap_or("");
@@ -64,6 +82,7 @@ async fn handle_send(state: &mut AppState, params: &serde_json::Map<String, Valu
         let mut dm = DataMessage::default();
         dm.body = Some(text);
         state.manager.send_message_to_group(&gid, ContentBody::DataMessage(dm), ts).await?;
+        return Ok(json!({"timestamp": ts, "results": [{"recipient": "group", "status": "sent"}]}));
     } else {
         let recip = recipients(params);
         let store = state.manager.store();
@@ -71,23 +90,23 @@ async fn handle_send(state: &mut AppState, params: &serde_json::Map<String, Valu
             .filter_map(|c| c.ok())
             .collect();
 
+        let mut results: Vec<Value> = Vec::with_capacity(recip.len());
         for phone in &recip {
-            let phone_clean = phone.strip_prefix('+').unwrap_or(phone);
-            if let Some(c) = contacts.iter().find(|c| {
-                c.phone_number.as_ref().map(|p| format!("{}", p).contains(phone_clean)).unwrap_or(false)
-            }) {
+            if let Some(c) = find_contact(&contacts, phone) {
                 let srv_id = ServiceId::Aci(Aci::from(c.uuid));
                 let mut dm = DataMessage::default();
                 dm.body = Some(text.clone());
                 state.manager.send_message(srv_id, ContentBody::DataMessage(dm), ts).await?;
                 debug!("Sent to {}", c.name);
+                results.push(json!({"recipient": phone, "status": "sent"}));
             } else {
                 warn!("Contact not found: {}", phone);
+                results.push(json!({"recipient": phone, "status": "failed", "error": "contact not found"}));
             }
         }
+        // Non-empty results tells hermes send succeeded (backoff watch).
+        Ok(json!({"timestamp": ts, "results": results}))
     }
-
-    Ok(json!({"timestamp": ts, "results": []}))
 }
 
 async fn handle_send_typing(state: &mut AppState, params: &serde_json::Map<String, Value>) -> anyhow::Result<Value> {
@@ -108,10 +127,7 @@ async fn handle_send_typing(state: &mut AppState, params: &serde_json::Map<Strin
         .collect();
 
     for phone in &recip {
-        let phone_clean = phone.strip_prefix('+').unwrap_or(phone);
-        if let Some(c) = contacts.iter().find(|c| {
-            c.phone_number.as_ref().map(|p| format!("{}", p).contains(phone_clean)).unwrap_or(false)
-        }) {
+        if let Some(c) = find_contact(&contacts, phone) {
             let srv_id = ServiceId::Aci(Aci::from(c.uuid));
             state.manager.send_message(srv_id, body.clone(), ts).await?;
             debug!("Typing indicator sent to {}", c.name);
@@ -156,10 +172,7 @@ async fn handle_send_reaction(state: &mut AppState, params: &serde_json::Map<Str
 
     let recip = recipients(params);
     for phone in &recip {
-        let phone_clean = phone.strip_prefix('+').unwrap_or(phone);
-        if let Some(c) = contacts.iter().find(|c| {
-            c.phone_number.as_ref().map(|p| format!("{}", p).contains(phone_clean)).unwrap_or(false)
-        }) {
+        if let Some(c) = find_contact(&contacts, phone) {
             let srv_id = ServiceId::Aci(Aci::from(c.uuid));
             state.manager.send_message(srv_id, body.clone(), ts).await?;
             debug!("Reaction sent to {}", c.name);
