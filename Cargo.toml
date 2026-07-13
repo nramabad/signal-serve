@@ -13,7 +13,6 @@ tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors"] }
 
 # Force libsqlite3-sys to use vendored-openssl (avoids cross-compile OpenSSL hell)
-qrcode = { version = "0.14", default-features = false }
 libsqlite3-sys = { version = "0.36", features = ["bundled-sqlcipher-vendored-openssl"] }
 
 serde = { version = "1", features = ["derive"] }

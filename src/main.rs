@@ -1,5 +1,6 @@
 mod rpc;
 mod sse;
+mod ws;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -23,8 +24,6 @@ use presage_store_sqlite::SqliteStore;
 use serde_json::Value;
 use tokio::sync::{broadcast, Mutex};
 use tracing::info;
-use qrcode::QrCode;
-use qrcode::render::unicode;
 
 type SharedState = Arc<Mutex<AppState>>;
 
@@ -131,6 +130,7 @@ async fn cmd_link(store_path: &str) -> anyhow::Result<()> {
         .context("Failed to open store")?;
 
     let (tx, rx) = futures::channel::oneshot::channel();
+    let data_dir = Path::new(store_path).to_path_buf();
 
     // future::join runs both branches on same thread (Manager is !Send).
     // link_secondary_device sends URL via oneshot, then blocks for phone scan.
@@ -143,29 +143,42 @@ async fn cmd_link(store_path: &str) -> anyhow::Result<()> {
     );
     let pump = async {
         let url = rx.await.map_err(|_| anyhow::anyhow!("URL channel closed"))?;
-        println!("\n========================================");
-        println!("       SIGNAL LINK DEVICE");
-        println!("========================================");
+        println!("\n==============================================");
+        println!("        SIGNAL LINK DEVICE");
+        println!("==============================================");
         println!("\nProvisioning URL:");
         println!("  {}", url);
-        println!("\nQR Code (scan with Signal > Linked Devices):");
+        println!("\nOpen Signal mobile > Linked Devices > Scan this QR:");
+        println!("==============================================\n");
 
-        if let Ok(code) = QrCode::new(url.to_string().as_bytes()) {
-            let qr_str = code.render::<unicode::Dense1x2>()
-                .dark_color(unicode::Dense1x2::Dark)
-                .light_color(unicode::Dense1x2::Light)
-                .build();
-            println!("\n{}", qr_str);
-        }
+        eprintln!("SIGNAL_LINK_URL={}", url);
 
-        println!("\nWaiting for phone scan...");
-        println!("(re-run if QR doesn't appear)");
+        // Write URL and HTML to data dir (volume-mounted, survives container exit)
+        let _ = std::fs::write(data_dir.join("link-url.txt"), url.to_string().as_bytes());
+        let html = format!(
+            r#"<!DOCTYPE html><html><head><title>Signal Link</title><meta charset="utf-8"/></head><body>
+<h2>Scan with Signal</h2>
+<p>Provisioning URL:</p>
+<pre style="word-break:break-all;white-space:pre-wrap;background:#eee;padding:8px">{url}</pre>
+<p>Use Phone → Signal → Linked Devices → Scan</p>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<div id="qrcode"></div>
+<script>new QRCode(document.getElementById("qrcode"), "{url}");</script>
+</body></html>"#,
+        );
+        let _ = std::fs::write(data_dir.join("link-qr.html"), html.as_bytes());
         anyhow::Result::Ok(())
     };
 
     let (link_result, pump_result): (_, anyhow::Result<()>) =
         futures::future::join(link, pump).await;
-    let _manager = link_result.context("Linking failed")?;
+    let _manager = match link_result {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("LINK ERROR: {:#}", e);
+            return Err(e.into());
+        }
+    };
     pump_result?;
 
     info!("Device linked successfully!");
@@ -209,6 +222,7 @@ async fn cmd_serve(listen: &str, store_path: &str) -> anyhow::Result<()> {
         .route("/v1/health", get(health_check))
         .route("/api/v1/check", get(health_check))
         .route("/api/v1/events", get(sse::events_handler))
+        .route("/v1/receive/{account}", get(ws::ws_receive_handler))
         .route("/api/v1/rpc", post(rpc_handler))
         .with_state(state);
 
