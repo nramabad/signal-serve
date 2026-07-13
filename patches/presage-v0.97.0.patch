@@ -1,0 +1,109 @@
+diff --git a/presage-store-sqlite/src/protocol.rs b/presage-store-sqlite/src/protocol.rs
+index 7c7486174..0e4be9052 100644
+--- a/presage-store-sqlite/src/protocol.rs
++++ b/presage-store-sqlite/src/protocol.rs
+@@ -447,7 +447,7 @@ impl KyberPreKeyStore for SqliteProtocolStore {
+             {
+                 return Err(SignalProtocolError::InvalidMessage(
+                     CiphertextMessageType::PreKey,
+-                    "reused base key",
++                    "reused base key".to_string(),
+                 ));
+             }
+ 
+diff --git a/presage/src/manager/confirmation.rs b/presage/src/manager/confirmation.rs
+index 5301bff6e..d5d9433f3 100644
+--- a/presage/src/manager/confirmation.rs
++++ b/presage/src/manager/confirmation.rs
+@@ -11,7 +11,6 @@ use libsignal_service::utils::TryIntoE164;
+ use libsignal_service::websocket::account::{AccountAttributes, DeviceCapabilities};
+ use libsignal_service::websocket::registration::{RegistrationMethod, VerifyAccountResponse};
+ use libsignal_service::zkgroup::profiles::ProfileKey;
+-use libsignal_service::AccountManager;
+ use rand::RngCore;
+ use tracing::trace;
+ 
+@@ -102,44 +101,43 @@ impl<S: Store> Manager<S, Confirmation> {
+             .await?;
+ 
+         let skip_device_transfer = true;
+-        let mut account_manager = AccountManager::new(
+-            identified_push_service,
+-            identified_websocket,
+-            Some(profile_key),
+-        );
+ 
+         let VerifyAccountResponse {
+             aci,
+             pni,
+             storage_capable: _,
+             number: _,
+-        } = account_manager
++        } = identified_websocket
+             .register_account(
+                 &mut rng,
+                 RegistrationMethod::SessionId(&session.id),
++                None, // gcm_token
+                 AccountAttributes {
+                     fetches_messages: true,
++                    voice: false,
++                    video: false,
+                     registration_id,
+                     pni_registration_id,
+                     name: None,
+                     registration_lock: None,
+                     unidentified_access_key: Some(profile_key.derive_access_key().to_vec()),
+                     unrestricted_unidentified_access: false, // TODO: make this configurable?
+-                    capabilities: DeviceCapabilities {
++                    capabilities: Some(DeviceCapabilities {
+                         storage: true,
+                         transfer: false,
+                         attachment_backfill: false,
+                         spqr: true,
+                         profiles_v2: false,
+                         username_change_sync_message: true,
+-                    },
++                    }),
+                     discoverable_by_phone_number: true,
+-                    pin: None,
+                     recovery_password: None,
+                 },
+                 &mut self.store.aci_protocol_store(),
+                 &mut self.store.pni_protocol_store(),
+                 skip_device_transfer,
++                phone_number,
++                password,
+             )
+             .await?;
+ 
+diff --git a/presage/src/manager/registered.rs b/presage/src/manager/registered.rs
+index c3b5eedc6..693a8d1a3 100644
+--- a/presage/src/manager/registered.rs
++++ b/presage/src/manager/registered.rs
+@@ -2085,22 +2085,23 @@ async fn set_account_attributes<S: Store>(
+     account_manager
+         .set_account_attributes(AccountAttributes {
+             fetches_messages: true,
++            voice: false,
++            video: false,
+             registration_id: data.registration_id,
+             pni_registration_id,
+             name,
+             registration_lock: None,
+             unidentified_access_key: Some(data.profile_key.derive_access_key().to_vec()),
+             unrestricted_unidentified_access: false,
+-            capabilities: DeviceCapabilities {
++            capabilities: Some(DeviceCapabilities {
+                 storage: true,
+                 transfer: false,
+                 attachment_backfill: false,
+                 spqr: true,
+                 profiles_v2: false,
+                 username_change_sync_message: true,
+-            },
++            }),
+             discoverable_by_phone_number: true,
+-            pin: None,
+             recovery_password: None,
+         })
+         .await?;

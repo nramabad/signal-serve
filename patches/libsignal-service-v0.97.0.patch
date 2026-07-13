@@ -1,0 +1,113 @@
+diff --git a/src/cipher.rs b/src/cipher.rs
+index acc2d0b23..d0b1e01ea 100644
+--- a/src/cipher.rs
++++ b/src/cipher.rs
+@@ -10,9 +10,10 @@ use libsignal_protocol::{
+     CiphertextMessageType, DeviceId, IdentityKeyStore, KyberPreKeyStore,
+     PlaintextContent, PreKeySignalMessage, PreKeyStore, ProtocolAddress,
+     ProtocolStore, PublicKey, SealedSenderDecryptionResult, SenderCertificate,
+-    SenderKeyDistributionMessage, SenderKeyStore, ServiceId, SessionStore,
+-    SessionUsabilityRequirements, SignalMessage, SignalProtocolError,
+-    SignedPreKeyStore, Timestamp, UnidentifiedSenderMessageContent,
++    SenderKeyDistributionMessage, SenderKeyStore, ServiceId, SessionNotFound,
++    SessionStore, SessionUsabilityRequirements, SignalMessage,
++    SignalProtocolError, SignedPreKeyStore, Timestamp,
++    UnidentifiedSenderMessageContent,
+ };
+ use prost::Message;
+ use rand::{rng, CryptoRng, Rng};
+@@ -301,7 +302,7 @@ where
+                     .protocol_store
+                     .load_session(&sender)
+                     .await?
+-                    .ok_or(SignalProtocolError::SessionNotFound(sender))?;
++                    .ok_or(SignalProtocolError::SessionNotFound(SessionNotFound::new(sender, "load_session")))?;
+ 
+                 strip_padding_version(
+                     session_record.session_version()?,
+@@ -377,7 +378,7 @@ where
+                     .protocol_store
+                     .load_session(&sender)
+                     .await?
+-                    .ok_or(SignalProtocolError::SessionNotFound(sender))?;
++                    .ok_or(SignalProtocolError::SessionNotFound(SessionNotFound::new(sender, "load_session")))?;
+ 
+                 strip_padding_version(
+                     session_record.session_version()?,
+@@ -487,7 +488,7 @@ where
+             .load_session(address)
+             .await?
+             .ok_or_else(|| {
+-            SignalProtocolError::SessionNotFound(address.clone())
++            SignalProtocolError::SessionNotFound(SessionNotFound::new(address.clone(), "encrypt_message"))
+         })?;
+ 
+         let record_usable = session_record
+@@ -497,7 +498,7 @@ where
+             )
+             .unwrap_or(false);
+         if !record_usable {
+-            Err(SignalProtocolError::SessionNotFound(address.clone()))?;
++            Err(SignalProtocolError::SessionNotFound(SessionNotFound::new(address.clone(), "encrypt_message")))?;
+         }
+ 
+         let padded_content =
+diff --git a/src/push_service/mod.rs b/src/push_service/mod.rs
+index 086a45fb3..4ede005d2 100644
+--- a/src/push_service/mod.rs
++++ b/src/push_service/mod.rs
+@@ -164,10 +164,18 @@ impl PushService {
+         let ws = builder
+             .upgrade()
+             .send()
+-            .await?
++            .await
++            .map_err(|e| {
++                tracing::error!("WS upgrade send FAILED: {:#}", e);
++                e
++            })?
+             .into_websocket()
+             .instrument(span.clone())
+-            .await?;
++            .await
++            .map_err(|e| {
++                tracing::error!("WS into_websocket FAILED: {:#}", e);
++                e
++            })?;
+ 
+         let unidentified_push_service = PushService {
+             servers: self.servers,
+diff --git a/src/sender.rs b/src/sender.rs
+index b490119e3..df0ea2c64 100644
+--- a/src/sender.rs
++++ b/src/sender.rs
+@@ -5,7 +5,7 @@ use libsignal_core::{curve::CurveError, InvalidDeviceId};
+ use libsignal_protocol::{
+     process_prekey_bundle, Aci, DeviceId, IdentityKey, IdentityKeyPair, Pni,
+     ProtocolStore, SenderCertificate, SenderKeyStore, ServiceId,
+-    SignalProtocolError,
++    SessionNotFound, SignalProtocolError,
+ };
+ use rand::{rng, CryptoRng, Rng};
+ use tracing::{debug, error, info, trace, warn};
+@@ -919,9 +919,10 @@ where
+                     },
+                     Err(MessageSenderError::ServiceError(
+                         ServiceError::SignalProtocolError(
+-                            SignalProtocolError::SessionNotFound(addr),
++                            SignalProtocolError::SessionNotFound(snf),
+                         ),
+                     )) => {
++                        let addr = snf.address.unwrap();
+                         // SessionNotFound is returned on certain session corruption.
+                         // Since delete_session *creates* a session if it doesn't exist,
+                         // the NotFound error is an indicator of session corruption.
+@@ -932,7 +933,7 @@ where
+                             Err(error) => {
+                                 tracing::warn!(%error, %addr, "failed to delete session");
+                                 return Err(
+-                                    SignalProtocolError::SessionNotFound(addr)
++                                    SignalProtocolError::SessionNotFound(SessionNotFound::new(addr, "send_message"))
+                                         .into(),
+                                 );
+                             },

@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout signal-serve
+        uses: actions/checkout@v4
+
+      - name: Checkout presage (upstream + apply patches)
+        run: |
+          git clone https://github.com/whisperfish/presage.git /tmp/presage
+          cd /tmp/presage
+          git checkout 63482efd0
+          git apply ${{ github.workspace }}/patches/presage-v0.97.0.patch
+
+      - name: Checkout libsignal-service-rs (upstream + apply patches)
+        run: |
+          git clone https://github.com/whisperfish/libsignal-service-rs.git /tmp/libsignal-service-rs
+          cd /tmp/libsignal-service-rs
+          git checkout fd481655d481388ebfe3a1fdb85a668b4876d592
+          git apply ${{ github.workspace }}/patches/libsignal-service-v0.97.0.patch
+
+      - name: Configure Cargo for CI paths
+        run: |
+          mkdir -p ~/.cargo
+          cat > ~/.cargo/config.toml << 'EOF'
+          [patch."https://github.com/whisperfish/presage.git"]
+          presage = { path = "/tmp/presage/presage" }
+          "presage-store-sqlite" = { path = "/tmp/presage/presage-store-sqlite" }
+
+          [patch."https://github.com/whisperfish/libsignal-service-rs.git"]
+          libsignal-service = { path = "/tmp/libsignal-service-rs" }
+          EOF
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-unknown-linux-musl
+
+      - name: Install cross
+        run: cargo install cross || true
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Unit tests
+        run: cargo test --lib
+
+      - name: Build (native)
+        run: cargo build --release
+
+      - name: Cross-compile aarch64-musl
+        run: cross build --release --target aarch64-unknown-linux-musl
+
+      - name: Smoke test (--help)
+        run: ./target/release/signal-serve --help
+
+      - name: Upload aarch64-musl binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: signal-serve-aarch64-musl
+          path: target/aarch64-unknown-linux-musl/release/signal-serve
+          retention-days: 7
