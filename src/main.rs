@@ -105,6 +105,17 @@ fn store_url(path: &str) -> String {
     format!("sqlite://{}", abs.display())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn store_url_builds_sqlite_path() {
+        assert_eq!(store_url("/tmp/foo"), "sqlite:///tmp/foo/signal-serve.db");
+        assert_eq!(store_url("/home/user/signal"), "sqlite:///home/user/signal/signal-serve.db");
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()

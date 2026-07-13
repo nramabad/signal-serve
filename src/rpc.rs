@@ -322,3 +322,80 @@ async fn handle_send_attachments(state: &mut AppState, params: &serde_json::Map<
 
     Ok(json!({"timestamp": now_ts(), "results": results}))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use presage::libsignal_service::prelude::Uuid;
+    use presage::model::contacts::Contact;
+    use presage::libsignal_service::proto::Verified;
+
+    fn make_contact(uuid: Uuid, phone: Option<String>, name: &str) -> Contact {
+        Contact {
+            uuid,
+            phone_number: phone.map(|p| p.parse().expect("valid phone")),
+            name: name.to_string(),
+            verified: Verified::default(),
+            profile_key: vec![],
+            expire_timer: 0,
+            expire_timer_version: 2,
+            inbox_position: 0,
+            avatar: None,
+        }
+    }
+
+    #[test]
+    fn find_contact_uuid_match() {
+        let uuid = Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap();
+        let contacts = vec![make_contact(uuid, Some("+15551234567".to_string()), "Alice")];
+        assert_eq!(find_contact(&contacts, "12345678-1234-1234-1234-123456789012").map(|c| c.uuid), Some(uuid));
+        assert_eq!(find_contact(&contacts, "+12345678-1234-1234-1234-123456789012").map(|c| c.uuid), Some(uuid));
+    }
+
+    #[test]
+    fn find_contact_phone_substring_match() {
+        let uuid = Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap();
+        let contacts = vec![make_contact(uuid, Some("+15551234567".to_string()), "Alice")];
+        assert_eq!(find_contact(&contacts, "5551234567").map(|c| c.uuid), Some(uuid));
+        assert_eq!(find_contact(&contacts, "+15551234567").map(|c| c.uuid), Some(uuid));
+    }
+
+    #[test]
+    fn find_contact_no_match() {
+        let uuid = Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap();
+        let contacts = vec![make_contact(uuid, Some("+15551234567".to_string()), "Alice")];
+        assert!(find_contact(&contacts, "0000000000").is_none());
+        assert!(find_contact(&contacts, "invalid-uuid").is_none());
+    }
+
+    #[test]
+    fn msg_text_extraction() {
+        let mut params = serde_json::Map::new();
+        params.insert("message".to_string(), serde_json::Value::String("hello".to_string()));
+        assert_eq!(msg_text(&params), "hello");
+
+        let params_empty = serde_json::Map::new();
+        assert_eq!(msg_text(&params_empty), "");
+    }
+
+    #[test]
+    fn recipients_extraction() {
+        let mut params = serde_json::Map::new();
+        params.insert("recipient".to_string(), serde_json::json!(["+15551234567", "+15559876543"]));
+        let recips = recipients(&params);
+        assert_eq!(recips, vec!["+15551234567", "+15559876543"]);
+
+        let params_empty = serde_json::Map::new();
+        assert_eq!(recipients(&params_empty), Vec::<String>::new());
+    }
+
+    #[test]
+    fn group_id_bytes_extraction() {
+        let mut params = serde_json::Map::new();
+        params.insert("groupId".to_string(), serde_json::Value::String("group123".to_string()));
+        assert_eq!(group_id_bytes(&params), Some(b"group123".to_vec()));
+
+        let params_empty = serde_json::Map::new();
+        assert_eq!(group_id_bytes(&params_empty), None);
+    }
+}
