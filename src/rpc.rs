@@ -273,7 +273,7 @@ async fn handle_send_attachments(state: &mut AppState, params: &serde_json::Map<
     }
 
     let upload_results = state.manager.upload_attachments(
-        specs.into_iter().zip(datas.into_iter()).collect()
+        specs.into_iter().zip(datas).collect()
     ).await?;
 
     let mut pointers = Vec::new();
