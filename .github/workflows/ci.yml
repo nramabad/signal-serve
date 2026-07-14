@@ -29,7 +29,7 @@ jobs:
         run: cargo install cross || true
 
       - name: Format check
-        run: cargo fmt -p signal-serve -- --check
+        run: cargo fmt --check
 
       - name: Clippy
         run: cargo clippy -p signal-serve --all-targets -- -D warnings
