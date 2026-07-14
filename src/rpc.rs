@@ -79,10 +79,12 @@ async fn handle_send(state: &mut AppState, params: &serde_json::Map<String, Valu
     let ts = now_ts();
 
     if let Some(gid) = group_id_bytes(params) {
-        let mut dm = DataMessage::default();
-        dm.body = Some(text);
+        let dm = DataMessage {
+            body: Some(text),
+            ..Default::default()
+        };
         state.manager.send_message_to_group(&gid, ContentBody::DataMessage(dm), ts).await?;
-        return Ok(json!({"timestamp": ts, "results": [{"recipient": "group", "status": "sent"}]}));
+        Ok(json!({"timestamp": ts, "results": [{"recipient": "group", "status": "sent"}]}))
     } else {
         let recip = recipients(params);
         let store = state.manager.store();
@@ -94,8 +96,10 @@ async fn handle_send(state: &mut AppState, params: &serde_json::Map<String, Valu
         for phone in &recip {
             if let Some(c) = find_contact(&contacts, phone) {
                 let srv_id = ServiceId::Aci(Aci::from(c.uuid));
-                let mut dm = DataMessage::default();
-                dm.body = Some(text.clone());
+                let dm = DataMessage {
+                    body: Some(text.clone()),
+                    ..Default::default()
+                };
                 state.manager.send_message(srv_id, ContentBody::DataMessage(dm), ts).await?;
                 debug!("Sent to {}", c.name);
                 results.push(json!({"recipient": phone, "status": "sent"}));
@@ -166,8 +170,10 @@ async fn handle_send_reaction(state: &mut AppState, params: &serde_json::Map<Str
         target_author_aci_binary: target_uuid.map(|u| u.as_bytes().to_vec()),
     };
 
-    let mut dm = DataMessage::default();
-    dm.reaction = Some(reaction);
+    let dm = DataMessage {
+        reaction: Some(reaction),
+        ..Default::default()
+    };
     let body = ContentBody::DataMessage(dm);
 
     let recip = recipients(params);
@@ -302,9 +308,11 @@ async fn handle_send_attachments(state: &mut AppState, params: &serde_json::Map<
             c.phone_number.as_ref().map(|p| format!("{}", p).contains(phone_clean)).unwrap_or(false)
         }) {
             let srv_id = ServiceId::Aci(Aci::from(c.uuid));
-            let mut dm = DataMessage::default();
-            dm.body = if text.is_empty() { None } else { Some(text.clone()) };
-            dm.attachments = pointers.clone();
+            let dm = DataMessage {
+                body: if text.is_empty() { None } else { Some(text.clone()) },
+                attachments: pointers.clone(),
+                ..Default::default()
+            };
 
             state.manager.send_message(
                 srv_id,

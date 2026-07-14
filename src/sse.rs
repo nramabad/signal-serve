@@ -117,8 +117,8 @@ pub async fn run_message_listener(state: SharedState) -> anyhow::Result<()> {
 
 fn received_to_sse_envelope(msg: &Received) -> serde_json::Value {
     match msg {
-        Received::QueueEmpty => return json!({"envelope": {"queueEmpty": true}}),
-        Received::Contacts => return json!({"envelope": {"contactsSynced": true}}),
+        Received::QueueEmpty => json!({"envelope": {"queueEmpty": true}}),
+        Received::Contacts => json!({"envelope": {"contactsSynced": true}}),
         Received::Content(c) => {
             let src = c.metadata.sender.service_id_string();
             let ts = c.metadata.timestamp.timestamp_millis();

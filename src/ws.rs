@@ -4,7 +4,7 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use tokio::time::{interval, Duration};
-use tracing::{info, debug, warn};
+use tracing::{info, debug};
 
 use crate::SharedState;
 
