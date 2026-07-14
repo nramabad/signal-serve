@@ -35,7 +35,7 @@ jobs:
         run: cargo clippy -p signal-serve --all-targets -- -D warnings
 
       - name: Unit tests
-        run: cargo test -p signal-serve --lib
+        run: cargo test -p signal-serve --bins
 
       - name: Build (native)
         run: cargo build -p signal-serve --release
