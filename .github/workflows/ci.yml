@@ -20,6 +20,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install system deps (protoc, cmake)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler cmake
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
