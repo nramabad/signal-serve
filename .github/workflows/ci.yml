@@ -17,32 +17,8 @@ jobs:
     steps:
       - name: Checkout signal-serve
         uses: actions/checkout@v4
-
-      - name: Checkout presage (upstream + apply patches)
-        run: |
-          git clone https://github.com/whisperfish/presage.git /tmp/presage
-          cd /tmp/presage
-          git checkout 63482efd0
-          git apply ${{ github.workspace }}/patches/presage-v0.97.0.patch
-
-      - name: Checkout libsignal-service-rs (upstream + apply patches)
-        run: |
-          git clone https://github.com/whisperfish/libsignal-service-rs.git /tmp/libsignal-service-rs
-          cd /tmp/libsignal-service-rs
-          git checkout fd481655d481388ebfe3a1fdb85a668b4876d592
-          git apply ${{ github.workspace }}/patches/libsignal-service-v0.97.0.patch
-
-      - name: Configure Cargo for CI paths
-        run: |
-          mkdir -p ~/.cargo
-          cat > ~/.cargo/config.toml << 'EOF'
-          [patch."https://github.com/whisperfish/presage.git"]
-          presage = { path = "/tmp/presage/presage" }
-          "presage-store-sqlite" = { path = "/tmp/presage/presage-store-sqlite" }
-
-          [patch."https://github.com/whisperfish/libsignal-service-rs.git"]
-          libsignal-service = { path = "/tmp/libsignal-service-rs" }
-          EOF
+        with:
+          submodules: recursive
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -53,19 +29,19 @@ jobs:
         run: cargo install cross || true
 
       - name: Format check
-        run: cargo fmt --all -- --check
+        run: cargo fmt -p signal-serve -- --check
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy -p signal-serve --all-targets -- -D warnings
 
       - name: Unit tests
-        run: cargo test --lib
+        run: cargo test -p signal-serve --lib
 
       - name: Build (native)
-        run: cargo build --release
+        run: cargo build -p signal-serve --release
 
       - name: Cross-compile aarch64-musl
-        run: cross build --release --target aarch64-unknown-linux-musl
+        run: cross build -p signal-serve --release --target aarch64-unknown-linux-musl
 
       - name: Smoke test (--help)
         run: ./target/release/signal-serve --help
