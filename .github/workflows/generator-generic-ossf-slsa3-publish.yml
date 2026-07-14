@@ -24,34 +24,34 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      # ========================================================
-      #
-      # Step 1: Build your artifacts.
-      #
-      # ========================================================
-      - name: Build artifacts
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-unknown-linux-musl
+
+      - name: Install cross
+        run: cargo install cross || true
+
+      - name: Build native (x86_64)
+        run: cargo build -p signal-serve --release
+
+      - name: Cross-compile aarch64-musl
+        run: cross build -p signal-serve --release --target aarch64-unknown-linux-musl
+
+      - name: Copy and name artifacts
         run: |
-            # These are some amazing artifacts.
-            echo "artifact1" > artifact1
-            echo "artifact2" > artifact2
+          cp target/release/signal-serve signal-serve-x86_64
+          cp target/aarch64-unknown-linux-musl/release/signal-serve signal-serve-aarch64
+          chmod +x signal-serve-x86_64 signal-serve-aarch64
 
-      # ========================================================
-      #
-      # Step 2: Add a step to generate the provenance subjects
-      #         as shown below. Update the sha256 sum arguments
-      #         to include all binaries that you generate
-      #         provenance for.
-      #
-      # ========================================================
       - name: Generate subject for provenance
         id: hash
         run: |
           set -euo pipefail
-
-          # List the artifacts the provenance will refer to.
-          files=$(ls artifact*)
-          # Generate the subjects (base64 encoded).
+          files="signal-serve-x86_64 signal-serve-aarch64"
           echo "hashes=$(sha256sum $files | base64 -w0)" >> "${GITHUB_OUTPUT}"
 
   provenance:
