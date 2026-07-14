@@ -1,6 +1,8 @@
 [target.aarch64-unknown-linux-musl]
 pre-build = [
-  "dpkg --add-architecture $CROSS_DEB_ARCH",
-  "apt-get update",
-  "apt-get install --assume-yes protobuf-compiler",
+  "apt-get update && apt-get install --assume-yes curl unzip",
+  "curl --retry 5 --retry-delay 10 -sLO https://github.com/protocolbuffers/protobuf/releases/download/v28.3/protoc-28.3-linux-x86_64.zip",
+  "unzip -q -o protoc-28.3-linux-x86_64.zip -d /usr/local",
+  "chmod +x /usr/local/bin/protoc",
+  "protoc --version",
 ]

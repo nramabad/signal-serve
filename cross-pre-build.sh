@@ -1,8 +1,13 @@
 #!/bin/sh
 set -e
 
+# Install protoc 28.3 (libsignal v0.97.0 proto3 requires --experimental_allow_proto3_optional)
 cd /tmp
-apt-get update && apt-get install -y unzip perl protobuf-compiler
+apt-get update && apt-get install -y curl unzip perl
+curl --retry 5 --retry-delay 10 -sLO https://github.com/protocolbuffers/protobuf/releases/download/v28.3/protoc-28.3-linux-x86_64.zip
+unzip -q -o protoc-28.3-linux-x86_64.zip -d /usr/local
+chmod +x /usr/local/bin/protoc
+rm protoc-28.3-linux-x86_64.zip
 echo "protoc installed: $(protoc --version)"
 
 # Build OpenSSL for aarch64-musl target (needed by libsqlite3-sys/sqlcipher)
