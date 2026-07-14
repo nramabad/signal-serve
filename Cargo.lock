@@ -1743,6 +1743,7 @@ dependencies = [
 [[package]]
 name = "libsignal-service"
 version = "0.1.0"
+source = "git+https://github.com/nramabad/libsignal-service-rs.git?rev=33a02d873#33a02d873968861e1d47e41d9e9cb87bcded1d27"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -2224,6 +2225,7 @@ dependencies = [
 [[package]]
 name = "presage"
 version = "0.8.0-dev"
+source = "git+https://github.com/nramabad/presage.git?rev=540210ae5#540210ae557f1fbb13d84b49563b2d26d3098799"
 dependencies = [
  "base64",
  "bytes",
@@ -2245,6 +2247,7 @@ dependencies = [
 [[package]]
 name = "presage-store-sqlite"
 version = "0.8.0-dev"
+source = "git+https://github.com/nramabad/presage.git?rev=540210ae5#540210ae557f1fbb13d84b49563b2d26d3098799"
 dependencies = [
  "async-trait",
  "bytes",
