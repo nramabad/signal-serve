@@ -33,6 +33,13 @@ curve25519-dalek = { git = "https://github.com/signalapp/curve25519-dalek", tag 
 [patch."https://github.com/whisperfish/libsignal-service-rs.git"]
 libsignal-service = { git = "https://github.com/nramabad/libsignal-service-rs.git", rev = "33a02d873" }
 
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tempfile = "3"
+
+[features]
+e2e = []
+
 [profile.release]
 lto = true
 codegen-units = 1
